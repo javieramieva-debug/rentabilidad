@@ -1,6 +1,103 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<script>
+// ═══════════════════════════════════════════════════════════════
+// FIREBASE SYNC LAYER — Divemex Rentabilidad
+// Intercepta localStorage para sincronizar con Firestore
+// ═══════════════════════════════════════════════════════════════
+(function() {
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyCU491lmp9s3LrLGOYO2oIzqx1StHCe6Ps",
+    authDomain: "divemex-rentabilidad.firebaseapp.com",
+    projectId: "divemex-rentabilidad",
+    storageBucket: "divemex-rentabilidad.firebasestorage.app",
+    messagingSenderId: "632216792097",
+    appId: "1:632216792097:web:565cd558416d7cfc550760"
+  };
+
+  // Load Firebase SDK dynamically
+  function loadFirebase() {
+    return new Promise((resolve) => {
+      if (window._fbLoaded) { resolve(); return; }
+      const s = document.createElement('script');
+      s.src = 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js';
+      s.onload = () => {
+        const s2 = document.createElement('script');
+        s2.src = 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js';
+        s2.onload = () => {
+          firebase.initializeApp(FIREBASE_CONFIG);
+          window._db = firebase.firestore();
+          window._fbLoaded = true;
+          console.log('[FB] Firebase conectado ✅');
+          resolve();
+        };
+        document.head.appendChild(s2);
+      };
+      document.head.appendChild(s);
+    });
+  }
+
+  // Intercept localStorage
+  const _origSetItem = localStorage.setItem.bind(localStorage);
+  const _origGetItem = localStorage.getItem.bind(localStorage);
+
+  localStorage.setItem = function(key, value) {
+    _origSetItem(key, value);
+    // Only sync decision keys (not logo or other data)
+    if (key && key.includes('decisiones')) {
+      loadFirebase().then(() => {
+        const doc = key.replace(/[^a-zA-Z0-9_-]/g, '_');
+        window._db.collection('rentabilidad').doc(doc).set({
+          key: key,
+          data: value,
+          updated: new Date().toISOString(),
+          plant: key.includes('jalisco') ? 'jalisco' : key.includes('nayarit') ? 'nayarit' : 'sinaloa'
+        }).then(() => console.log('[FB] Guardado en nube ✅', key))
+          .catch(e => console.warn('[FB] Error guardando:', e));
+      });
+    }
+  };
+
+  // On page load, pull from Firestore and update localStorage
+  window.addEventListener('DOMContentLoaded', () => {
+    loadFirebase().then(() => {
+      // Get all decision docs
+      window._db.collection('rentabilidad').get().then(snapshot => {
+        snapshot.forEach(doc => {
+          const d = doc.data();
+          if (d.key && d.data) {
+            _origSetItem(d.key, d.data);
+            console.log('[FB] Datos cargados desde nube:', d.key);
+          }
+        });
+        // Trigger app reload if it has a refresh function
+        if (typeof cargarDatos === 'function') cargarDatos();
+        if (typeof renderAll === 'function') renderAll();
+        if (typeof init === 'function') init();
+      }).catch(e => console.warn('[FB] Error cargando:', e));
+    });
+  });
+
+  // Show sync status indicator
+  window.addEventListener('load', () => {
+    const badge = document.createElement('div');
+    badge.id = 'fb-badge';
+    badge.style.cssText = 'position:fixed;bottom:16px;right:16px;background:#1e3a5f;color:#fff;'+
+      'padding:6px 12px;border-radius:20px;font-size:11px;font-weight:600;z-index:9999;'+
+      'box-shadow:0 2px 8px rgba(0,0,0,0.2);';
+    badge.innerHTML = '☁️ Sincronizando...';
+    document.body.appendChild(badge);
+    loadFirebase().then(() => {
+      badge.innerHTML = '☁️ Nube activa';
+      badge.style.background = '#15803d';
+      setTimeout(() => badge.style.opacity = '0.5', 3000);
+    });
+  });
+})();
+
+</script>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rentabilidad Divemex — Sinaloa</title>
